@@ -5,7 +5,7 @@ import ssl
 from html.parser import HTMLParser
 from urllib.parse import urljoin, urlparse
 
-DEFAULT_SERVER = "proj5.3700.network"
+DEFAULT_SERVER = "www.3700.network"
 DEFAULT_PORT = 443
 
 class Crawler:
@@ -15,43 +15,41 @@ class Crawler:
         self.username = args.username
         self.password = args.password
         self.csrf_token = None
-        self.ssl_context = ssl.create_default_context()
-        self.session_cookies = {}  
-        self.visited_urls = set()
-        self.visited_urls.add("http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd")
-        self.visited_urls.add("https://proj5.3700.network/accounts/logout/")
+        self.ssl_ctxt = ssl.create_default_context()
+        self.cookies = {}  
+        self.url_visited = set()
+        self.url_visited.add("https://www.3700.network/accounts/logout/")
         self.secret_flags = set()  
-        self.urls_to_visit = ["/fakebook/"]
+        self.need_to_visit = ["/fakebook/"]
 
     def run(self):
         """
         Run the crawler
         """
-        self.fetch_csrf_token() # Get the CSRF token
+        self.get_csrf_token() # Get the CSRF token
         if self.csrf_token: # If the CSRF token was found
-            print(f"CSRF token found: {self.csrf_token}")
             self.login() # Log in
             self.crawl() # Start crawling
         else:
             print("CSRF token not found.")
 
-    def fetch_csrf_token(self):
+    def get_csrf_token(self):
         response = self.send_request("GET", "/accounts/login/?next=/fakebook/") # Get the login page
-        self.update_cookies(response) # Update the cookies
+        self.handle_cookies(response) # Update the cookies
 
-        token_start = response.find('csrfmiddlewaretoken') + len('csrfmiddlewaretoken') # Find the CSRF token
-        token_start = response.find('value="', token_start) + len('value="') # Find the start of the token
-        token_end = response.find('"', token_start) # Find the end of the token
-        self.csrf_token = response[token_start:token_end] # Extract the token
+        start_token = response.find('csrfmiddlewaretoken') + len('csrfmiddlewaretoken') # Find the CSRF token
+        start_token = response.find('value="', start_token) + len('value="') # Find the start of the token
+        end_token = response.find('"', start_token) # Find the end of the token
+        self.csrf_token = response[start_token:end_token] # Extract the token
 
     def login(self):
         """
         Log in to the server
         """
-        self.session_cookies['csrftoken'] = self.csrf_token # Add the CSRF token to the cookies 
+        self.cookies['csrftoken'] = self.csrf_token # Add the CSRF token to the cookies 
         post_data = f"username={self.username}&password={self.password}&csrfmiddlewaretoken={self.csrf_token}&next=/fakebook/" # Create the POST data
         response = self.send_request("POST", "/accounts/login/?next=/fakebook/", post_data=post_data) # Send the POST request
-        self.update_cookies(response) # Update the cookies
+        self.handle_cookies(response) # Update the cookies
 
     def send_request(self, method, path, post_data=None):
         """
@@ -65,7 +63,7 @@ class Crawler:
         Returns:
             _type_: _description_
         """
-        cookies = "; ".join([f"{key}={value}" for key, value in self.session_cookies.items()]) # Create the cookie header
+        cookies = "; ".join([f"{key}={value}" for key, value in self.cookies.items()]) # Create the cookie header
         headers = {
             "Host": self.server, # Add the host header
             "Connection": "close", # Add the connection header
@@ -83,7 +81,7 @@ class Crawler:
         request = "\r\n".join(request_lines) + "\r\n" # Join the request lines
 
         with socket.create_connection((self.server, self.port)) as sock: # Create a socket connection
-            with self.ssl_context.wrap_socket(sock, server_hostname=self.server) as ssock: # Wrap the socket in an SSL context
+            with self.ssl_ctxt.wrap_socket(sock, server_hostname=self.server) as ssock: # Wrap the socket in an SSL context
                 ssock.sendall(request.encode('utf-8')) # Send the request
                 response = self.receive_full_response(ssock) # Receive the response
                 
@@ -94,7 +92,7 @@ class Crawler:
                             return self.send_request("GET", urlparse(location).path) # Send a GET request to the location
                 return response 
 
-    def update_cookies(self, response):
+    def handle_cookies(self, response):
         """
         Update the cookies
 
@@ -106,7 +104,7 @@ class Crawler:
             if line.startswith("set-cookie:"): # If the line is a set-cookie header
                 cookie = line.split("set-cookie: ")[1].split(";")[0] # Get the cookie
                 key, value = cookie.split("=") # Split the cookie into key and value
-                self.session_cookies[key] = value # Add the cookie to the session cookies
+                self.cookies[key] = value # Add the cookie to the session cookies
 
     def receive_full_response(self, secure_socket):
         """
@@ -132,31 +130,31 @@ class Crawler:
         """
         Crawl the server for flags and links to visit
         """
-        while self.urls_to_visit and len(self.secret_flags) < 5: # While there are URLs to visit and less than 5 flags have been found
-            current_url = self.urls_to_visit.pop(0) # Get the next URL to visit
-            if current_url in self.visited_urls: # If the URL has already been visited
+        while self.need_to_visit and len(self.secret_flags) < 5: # While there are URLs to visit and less than 5 flags have been found
+            current_url = self.need_to_visit.pop(0) # Get the next URL to visit
+            if current_url in self.url_visited: # If the URL has already been visited
                 continue
 
-            self.visited_urls.add(current_url) # Add the URL to the visited URLs
+            self.url_visited.add(current_url) # Add the URL to the visited URLs
             response = self.send_request("GET", current_url) # Send a GET request to the URL
 
             parser = FlagFinder() # Create a flag finder
             parser.feed(response) # Feed the response to the parser
             flags = parser.get_flags() # Get the flags
             links = parser.get_links() # Get the links
-            print(f"Found {len(links)} links and {len(flags)} flags Size of queu is {len(self.urls_to_visit)}") 
+            # print(f"Found {len(links)} links and {len(flags)} flags Size of queu is {len(self.need_to_visit)}") 
 
             for flag in flags:
                 if flag not in self.secret_flags:
-                    print(f"Secret flag found: {flag}")
+                    print(flag.replace("FLAG: ", ""))
                     self.secret_flags.add(flag) # Add the flag to the secret flags
 
             for link in links:
                 parsed_link = urlparse(link) # Parse the link
                 if parsed_link.scheme == '' and parsed_link.netloc == '': # If the link is relative
                     link = urljoin(f"https://{self.server}", link) # Make the link absolute
-                if self.server in link and link not in self.visited_urls and link not in self.urls_to_visit: # If the link is on the server and has not been visited
-                    self.urls_to_visit.append(link) # Add the link to the URLs to visit
+                if self.server in link and link not in self.url_visited and link not in self.need_to_visit: # If the link is on the server and has not been visited
+                    self.need_to_visit.append(link) # Add the link to the URLs to visit
 
 
 
