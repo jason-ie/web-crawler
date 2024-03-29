@@ -128,33 +128,60 @@ class Crawler:
 
     def crawl(self):
         """
-        Crawl the server for flags and links to visit
+        Crawl the server for flags and links to visit using asynchronous requests
         """
-        while self.need_to_visit and len(self.secret_flags) < 5: # While there are URLs to visit and less than 5 flags have been found
-            current_url = self.need_to_visit.pop(0) # Get the next URL to visit
-            if current_url in self.url_visited: # If the URL has already been visited
-                continue
+        import concurrent.futures
 
-            self.url_visited.add(current_url) # Add the URL to the visited URLs
-            response = self.send_request("GET", current_url) # Send a GET request to the URL
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            future_to_url = {executor.submit(self.process_url, url): url for url in self.need_to_visit}
+            while future_to_url:
+                # Wait for the next future to complete.
+                done, _ = concurrent.futures.wait(
+                    future_to_url, return_when=concurrent.futures.FIRST_COMPLETED)
 
-            parser = FlagFinder() # Create a flag finder
-            parser.feed(response) # Feed the response to the parser
-            flags = parser.get_flags() # Get the flags
-            links = parser.get_links() # Get the links
-            # print(f"Found {len(links)} links and {len(flags)} flags Size of queu is {len(self.need_to_visit)}") 
+                for future in done:
+                    url = future_to_url[future]
+                    try:
+                        future.result()
+                    except Exception as exc:
+                        print('%r generated an exception: %s' % (url, exc))
+                    # Remove this future from the dict so we don't attempt to process it again.
+                    del future_to_url[future]
 
-            for flag in flags:
-                if flag not in self.secret_flags:
-                    print(flag.replace("FLAG: ", ""))
-                    self.secret_flags.add(flag) # Add the flag to the secret flags
+                # Add newly found URLs to the future_to_url dict
+                for url in list(self.need_to_visit):
+                    if url not in future_to_url.values():
+                        future_to_url[executor.submit(self.process_url, url)] = url
 
-            for link in links:
-                parsed_link = urlparse(link) # Parse the link
-                if parsed_link.scheme == '' and parsed_link.netloc == '': # If the link is relative
-                    link = urljoin(f"https://{self.server}", link) # Make the link absolute
-                if self.server in link and link not in self.url_visited and link not in self.need_to_visit: # If the link is on the server and has not been visited
-                    self.need_to_visit.append(link) # Add the link to the URLs to visit
+                if len(self.secret_flags) >= 5:
+                    break  # Stop if we've found all flags
+
+    def process_url(self, current_url):
+        """
+        Process a single URL: fetch, parse, and extract data.
+        """
+        if current_url in self.url_visited:  # Skip if already visited
+            return
+
+        self.url_visited.add(current_url)  # Mark as visited
+        response = self.send_request("GET", current_url)
+
+        parser = FlagFinder()
+        parser.feed(response)
+        flags = parser.get_flags()
+        links = parser.get_links()
+
+        for flag in flags:
+            if flag not in self.secret_flags:
+                print(flag.replace("FLAG: ", ""))
+                self.secret_flags.add(flag)
+
+        for link in links:
+            parsed_link = urlparse(link)
+            if parsed_link.scheme == '' and parsed_link.netloc == '':
+                link = urljoin(f"https://{self.server}", link)
+            if self.server in link and link not in self.url_visited and link not in self.need_to_visit:
+                self.need_to_visit.append(link)
 
 
 
