@@ -134,7 +134,7 @@ class Crawler:
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=25) as executor:
             future_to_url = {executor.submit(self.process_url, url): url for url in self.need_to_visit}
-            while future_to_url:
+            while future_to_url and len(self.secret_flags) < 5:
                 # Wait for the next future to complete.
                 done, _ = concurrent.futures.wait(
                     future_to_url, return_when=concurrent.futures.FIRST_COMPLETED)
