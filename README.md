@@ -6,34 +6,26 @@ This project involves the development of a web crawler specifically designed to 
 
 ## High-Level Approach
 
-The crawler is implemented in Python and operates by sending HTTP/1.1 requests to interact with the web server. Initially, it fetches the CSRF token required for authentication and then logs in using provided credentials. Post-login, it systematically traverses the site, parsing HTML content to find links and secret flags while managing cookies and handling various HTTP response codes efficiently. The approach emphasizes respectful crawling practices, such as limiting request rates and adhering to robots.txt guidelines where applicable.
+The web crawler was designed to authenticate and navigate through a simulated social networking site, Fakebook, to collect five secret flags hidden across its pages. The script employs Python’s standard libraries to manage HTTP requests, parse HTML content, and maintain session states via cookies.
 
-## Key Features
-
-Secure HTTPS Communication: Implements TLS wrapping over TCP sockets to ensure secure data transmission.
-Session Management: Handles cookies to maintain session state across requests.
-Dynamic Content Parsing: Uses html.parser from Python's standard library to parse HTML and extract data.
-Robust Link Management: Keeps track of visited URLs and prioritizes new links, avoiding infinite loops and redundant visits.
-Error Handling: Gracefully manages HTTP redirects and common error codes like 404 (Not Found) and 503 (Service Unavailable).
+- Initialization: It starts by establishing a secure HTTPS connection using ssl for encrypted communication with the server.
+- Authentication: The crawler retrieves a CSRF token and performs a login using provided credentials, handling cookies to maintain the session.
+- Concurrent Navigation: Utilizing concurrent.futures and a ThreadPoolExecutor, the script makes concurrent requests to explore multiple pages in parallel, aiming to efficiently discover and extract secret flags.
+- HTML Parsing: The html.parser module is used to parse page content, identifying links for further exploration and extracting flags.
+- Link and State Management: A set tracks visited URLs to prevent re-crawling, while a queue manages URLs that need to be visited, ensuring the crawler systematically covers the site without duplication.
 
 ## Challenges Faced
 
-Session Management Complexity: Ensuring the crawler correctly handles session cookies was particularly challenging, especially in maintaining the session across redirects and re-authentication scenarios.
-Dynamic Content Navigation: Parsing HTML to accurately extract links and secret flags, while accounting for relative URLs and dynamically generated content, required careful implementation and testing.
-Rate Limiting and Ethics: Balancing the need for thorough site coverage with ethical crawling practices, such as rate limiting and obeying robots.txt, posed an ongoing consideration throughout development.
+- Rate Limiting and Server Load: Implementing concurrent requests while ensuring the crawler does not overwhelm the server was a significant challenge. Balancing speed and politeness required fine-tuning the number of parallel workers.
+- Dynamic Content and Parsing: The diverse structure of HTML pages and dynamic content presented difficulties in reliably extracting links and secret flags. Crafting robust parsing logic that could handle various HTML formats was essential.
+- Session Management: Maintaining a valid session state across multiple concurrent requests, especially after login and during navigation, required careful handling of cookies and CSRF tokens.
 
 ## Testing Strategy
 
-### Local Testing Environment
-
-Mock Server Setup: Implemented a local HTTP server with predefined HTML pages to simulate the Fakebook environment, enabling controlled testing of the crawler's capabilities without impacting the actual site.
-Unit and Integration Tests
-Modular Testing: Developed unit tests for individual components, such as link extraction and cookie management, using Python's unittest framework.
-Integration Testing: Conducted comprehensive tests to evaluate the crawler's performance in real-world scenarios, including handling redirects and parsing complex HTML structures.
-
-## Debugging and Logging
-
-In order to debug, I utilized logging to track the crawler's decisions and network activity, which helped in the identification and resolution of issues encountered during development.
+- Unit Testing: Individual components of the crawler, such as the request sending mechanism, HTML parsing function, and cookie management, were tested in isolation using Python’s unittest framework. This ensured reliability and correctness of specific functionalities.
+- Integration Testing: The entire crawler was tested as a whole against a simulated environment that mimicked the structure of Fakebook. This environment was crafted to include pages with known flags, links, and various HTML structures to ensure comprehensive testing.
+- Concurrent Execution Testing: Special attention was given to testing the crawler’s behavior under concurrent execution. This included verifying that the crawler did not exceed the maximum number of allowed parallel requests and that it correctly managed the session state across these requests.
+- Error Handling: The crawler was tested against scenarios such as network failures, server errors, and unexpected HTML structures to ensure it could gracefully handle errors and continue operation.
 
 ## Conclusion
 
